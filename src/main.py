@@ -48,8 +48,12 @@ class GCN(nn.Module):
         x = self.dropout(x)
         x = self.conv3(x, edge_index)
         return x
+    
+def initialize_weights(m):
+    if isinstance(m, (nn.Linear, GCNConv)):
+        nn.init.xavier_uniform_(m.weight)
 
-def train_gnn(model, data, train_edges, G, all_nodes, num_epochs=100, lr=0.1, output_dir="experiments/gcn_experiment/lre1"):
+def train_gnn(model, data, train_edges, G, all_nodes, num_epochs=100, lr=0.01, output_dir="experiments/gcn_experiment/lre2"):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
     os.makedirs(output_dir, exist_ok=True)
