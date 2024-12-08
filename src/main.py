@@ -13,14 +13,13 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import json
 
-# Utility Functions
 def load_graph(file_path):
     with gzip.open(file_path, 'rt') as f:
         return nx.read_edgelist(f, create_using=nx.Graph(), nodetype=int)
 
 def create_pyg_data(G):
     edge_index = torch.tensor(list(G.edges), dtype=torch.long).t().contiguous()
-    x = torch.eye(G.number_of_nodes(), dtype=torch.float)  # Identity matrix for initial node features
+    x = torch.eye(G.number_of_nodes(), dtype=torch.float)
     return Data(x=x, edge_index=edge_index)
 
 def negative_sampling(G, all_nodes, num_samples):
@@ -31,7 +30,6 @@ def negative_sampling(G, all_nodes, num_samples):
             negative_samples.append([u, v])
     return negative_samples
 
-# GNN Models
 class GCN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(GCN, self).__init__()
@@ -51,8 +49,7 @@ class GCN(nn.Module):
         x = self.conv3(x, edge_index)
         return x
 
-# Training Function
-def train_gnn(model, data, train_edges, G, all_nodes, num_epochs=100, lr=0.01, output_dir="experiments/gcn_experiment"):
+def train_gnn(model, data, train_edges, G, all_nodes, num_epochs=100, lr=0.1, output_dir="experiments/gcn_experiment/lre1"):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
     os.makedirs(output_dir, exist_ok=True)
@@ -63,15 +60,12 @@ def train_gnn(model, data, train_edges, G, all_nodes, num_epochs=100, lr=0.01, o
             model.train()
             optimizer.zero_grad()
 
-            # Positive edges
             pos_edges = torch.tensor(train_edges, dtype=torch.long).t()
             pos_scores = torch.sigmoid((model(data)[pos_edges[0]] * model(data)[pos_edges[1]]).sum(dim=1))
 
-            # Negative edges
             neg_edges = torch.tensor(negative_sampling(G, all_nodes, len(train_edges)), dtype=torch.long).t()
             neg_scores = torch.sigmoid((model(data)[neg_edges[0]] * model(data)[neg_edges[1]]).sum(dim=1))
 
-            # Combine scores
             scores = torch.cat([pos_scores, neg_scores])
             labels = torch.cat([torch.ones(pos_scores.size(0)), torch.zeros(neg_scores.size(0))])
 
@@ -83,23 +77,18 @@ def train_gnn(model, data, train_edges, G, all_nodes, num_epochs=100, lr=0.01, o
                 log_file.write(f"Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item():.4f}\n")
                 log_file.flush()
 
-# Evaluation Function
 def evaluate(model, data, test_edges, negative_edges, output_dir="experiments/gcn_experiment"):
     model.eval()
 
-    # Positive scores
     pos_edges = torch.tensor(test_edges, dtype=torch.long).t()
     pos_scores = (model(data)[pos_edges[0]] * model(data)[pos_edges[1]]).sum(dim=1)
 
-    # Negative scores
     neg_edges = torch.tensor(negative_edges, dtype=torch.long).t()
     neg_scores = (model(data)[neg_edges[0]] * model(data)[neg_edges[1]]).sum(dim=1)
 
-    # Combine
     scores = torch.cat([pos_scores, neg_scores])
     labels = torch.cat([torch.ones(pos_scores.size(0)), torch.zeros(neg_scores.size(0))])
 
-    # Calculate Hit-Rate and MRR
     sorted_scores, indices = torch.sort(scores, descending=True)
     sorted_labels = labels[indices]
 
@@ -110,7 +99,6 @@ def evaluate(model, data, test_edges, negative_edges, output_dir="experiments/gc
 
     print(f"Hit-Rate: {hit_rate:.4f}, MRR: {mrr:.4f}")
 
-    # Save results
     results = {
         "Hit-Rate": hit_rate,
         "MRR": mrr
@@ -120,20 +108,16 @@ def evaluate(model, data, test_edges, negative_edges, output_dir="experiments/gc
         json.dump(results, f, indent=4)
     print(f"Results saved to {results_path}")
 
-# Main Execution
 file_path = './data/facebook_combined.txt.gz'
 G = load_graph(file_path)
 data = create_pyg_data(G)
 
-# Prepare Data
 all_nodes = list(G.nodes)
 edges = np.array(G.edges)
 train_edges, test_edges = train_test_split(edges, test_size=0.2, random_state=42)
 negative_edges = np.array(negative_sampling(G, all_nodes, len(test_edges)))
 
-# Initialize and Train Model
 model = GCN(input_dim=data.x.size(1), hidden_dim=16, output_dim=16)
 train_gnn(model, data, train_edges, G, all_nodes)
 
-# Evaluate Model
 evaluate(model, data, test_edges, negative_edges)
