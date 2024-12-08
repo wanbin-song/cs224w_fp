@@ -1,8 +1,9 @@
 import os
-import zipfile
+import gzip
+import networkx as nx
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import networkx as nx
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,23 +11,11 @@ from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 from sklearn.model_selection import train_test_split
 
-# Step 1: Download and Process Data
-data_url = "https://snap.stanford.edu/data/facebook_combined.txt.gz"
-data_path = "../data/facebook_combined.txt.gz"
-data_extracted_path = "../data/facebook_combined.txt"
+# Step 1: Load Data
+file_path = './data/facebook_combined.txt.gz'
 
-if not os.path.exists(data_path):
-    print("Downloading dataset...")
-    os.system(f"wget {data_url}")
-
-if not os.path.exists(data_extracted_path):
-    print("Extracting dataset...")
-    with zipfile.ZipFile(data_path, 'r') as z:
-        z.extractall(".")
-
-# Load graph
-graph_df = pd.read_csv(data_extracted_path, sep=" ", header=None, names=["source", "target"])
-G = nx.from_pandas_edgelist(graph_df)
+with gzip.open(file_path, 'rt') as f:
+    G = nx.read_edgelist(f, create_using=nx.Graph(), nodetype=int)
 
 # Step 2: Prepare Graph Data
 # Convert NetworkX graph to PyTorch Geometric Data object
@@ -59,7 +48,7 @@ class EnhancedGCN(nn.Module):
         return x
 
 # Step 4: Train-Test Split and Sampling for Recommendations
-edges = graph_df.values
+edges = np.array(G.edges)
 all_nodes = list(G.nodes)
 train_edges, test_edges = train_test_split(edges, test_size=0.2, random_state=42)
 
@@ -75,11 +64,13 @@ def negative_sampling(G, num_samples):
 negative_edges = np.array(negative_sampling(G, len(test_edges)))
 
 # Step 5: Training
+from tqdm import tqdm
+
 def train_gnn(model, data, train_edges, num_epochs=100, lr=0.01):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
 
-    for epoch in range(num_epochs):
+    for epoch in tqdm(range(num_epochs), desc="Training Progress"):
         model.train()
         optimizer.zero_grad()
 
@@ -100,7 +91,7 @@ def train_gnn(model, data, train_edges, num_epochs=100, lr=0.01):
         optimizer.step()
 
         if (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item():.4f}")
+            tqdm.write(f"Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item():.4f}")
 
 model = EnhancedGCN(input_dim=data.x.size(1), hidden_dim=16, output_dim=16)
 train_gnn(model, data, train_edges)
