@@ -10,7 +10,19 @@ project-root/
 ├── notebooks/
 │   └── data_exploration.ipynb      # Jupyter notebook for data exploration
 ├── environment.yml                 # Conda environment configuration file
+├── experiment/                     # Experiment results
+├── src/                            # Source code for training
 └── README.md                       # Project documentation
 ```
+
+## Usage
+1. Clone the repo.
+2. Install dependencies:
+3. Run the training and evaluation script:
+    python src/main.py
+
+## Experiments
+- **GCN Experiment**: Results can be found in `experiments/gcn_experiment/results.json`.
+
 ## Method
 TBU
