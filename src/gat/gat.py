@@ -1,3 +1,4 @@
+## This code references cs224w colab4
 
 import torch
 import torch_scatter
@@ -19,20 +20,25 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax, degree
 from torch_geometric.nn import GATConv
 
-
 class GAT(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, heads, num_layers=5, dropout = 0.5):
+    def __init__(self, in_channels, hidden_channels, out_channels, heads, num_layers = 3, dropout = 0.5):
         super().__init__()
         self.convs = torch.nn.ModuleList()
-        self.convs.append(GATConv(in_channels, hidden_channels, heads, dropout=0.5))
+        self.convs.append(GATConv(in_channels, hidden_channels, heads, dropout=dropout))
         for _ in range(num_layers - 2):
-            self.convs.append(GATConv(hidden_channels * heads, hidden_channels, heads, dropout=0.6))
-        self.convs.append(GATConv(hidden_channels * heads, out_channels, heads=1, concat=False, dropout=0.6))
+            self.convs.append(GATConv(hidden_channels * heads, hidden_channels, heads, dropout=dropout))
+        self.convs.append(GATConv(hidden_channels * heads, out_channels, heads=1, concat=False, dropout=dropout))
+        self.batch_norms = torch.nn.ModuleList([torch.nn.BatchNorm1d(hidden_channels * heads) for _ in range(num_layers - 1)])
+        self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x, edge_index):
-        for conv in self.convs[:-1]:
-            x = F.dropout(x, p=0.5, training=self.training)
-            x = F.elu(conv(x, edge_index))
-        x = F.dropout(x, p=0.5, training=self.training)
+    def forward(self, data):
+        x = data.x 
+        edge_index = data.edge_index
+        for i, conv in enumerate(self.convs[:-1]):
+            x = self.dropout(x)
+            x = conv(x, edge_index)
+            x = self.batch_norms[i](x)  
+            x = F.elu(x)
+        x = self.dropout(x)
         x = self.convs[-1](x, edge_index)
         return x

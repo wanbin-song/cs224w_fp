@@ -11,45 +11,23 @@ from torch_geometric.data import DataLoader
 import torch_geometric.nn as pyg_nn
 from tqdm import tqdm
 
-def calculate_hit_rate(preds, labels):
-    preds = (preds.detach().numpy() > 0.5).astype(int)
-    labels = labels.detach().numpy()
-    true_p = ((labels == 1) & (preds == 1)).sum()
-    total_p = (labels == 1).sum()
-    return true_p / total_p if total_p > 0 else 0
-
-def calculate_mrr(preds, labels):
-    preds = preds.detach().numpy()
-    labels = labels.detach().numpy()
-    ranks = []
-    for pred, label in zip(preds, labels):
-        if label == 1:
-            ranks.append(1)
-        else:
-            ranks.append(0)
-    return sum(ranks) / len(ranks) if len(ranks) > 0 else 0
-
 def evaluate(G, data, pos_edges, neg_edges, model):
     test_edges = torch.cat([pos_edges, neg_edges], dim = 1)
     labels = torch.cat([torch.ones(pos_edges.size(1)), torch.zeros(neg_edges.size(1))])
     model.eval()
-    out = model(data.x, data.edge_index)
+    out = model(data)
     preds = torch.sigmoid(torch.sum(out[test_edges[0]] * out[test_edges[1]], -1))
 
-    
-    # hit_rate = calculate_hit_rate(preds, labels)
-    # mrr = calculate_mrr(preds, labels)
+    pos_scores = (out[pos_edges[0]] * out[pos_edges[1]]).sum(dim=1)
 
-    pos_scores = (model(data.x, data.edge_index)[pos_edges[0]] * model(data.x, data.edge_index)[pos_edges[1]]).sum(dim=1)
-
-    neg_scores = (model(data.x, data.edge_index)[neg_edges[0]] * model(data.x, data.edge_index)[neg_edges[1]]).sum(dim=1)
+    neg_scores = (out[neg_edges[0]] * out[neg_edges[1]]).sum(dim=1)
 
     scores = torch.cat([pos_scores, neg_scores])
     labels = torch.cat([torch.ones(pos_scores.size(0)), torch.zeros(neg_scores.size(0))])
-    sorted_scores, indices = torch.sort(scores, descending=True)
+    _, indices = torch.sort(scores, descending=True)
     sorted_labels = labels[indices]
 
-    hit_rate = (sorted_labels[:len(pos_scores)] == 1).float().mean().item()
+    hit_rate = (sorted_labels[:100] == 1).float().mean().item()
 
     ranks = (sorted_labels == 1).nonzero(as_tuple=True)[0] + 1
     mrr = (1.0 / ranks.float()).mean().item()
